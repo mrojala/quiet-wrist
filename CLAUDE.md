@@ -20,16 +20,16 @@ See `README.md` for the mechanism and the device setup.
 - `Prefs.kt` — two settings plus the on-device decision log.
 - `MainActivity.kt` — setup and diagnostics screen, built programmatically.
 
-### Product flavors
+### Settled questions — do not re-litigate
 
-Two, on the `identity` dimension, differing only in application id:
-
-- `standard` → `com.mrojala.quietwrist`. The real build.
-- `masquerade` → `com.whatsapp.quietwrist`. An experiment to see whether Huawei Health's
-  quick-reply whitelist is a prefix match. Sideload-only — it must never be published,
-  and `app_name` must keep saying QuietWrist so it is never mistaken for WhatsApp itself.
-
-`app_name` comes from `resValue` per flavor, so there is no `res/values/strings.xml`.
+- **Replying from the watch is impossible.** Huawei Health gates quick reply on an exact
+  package-name match. Tested: a `com.whatsapp.quietwrist` application id behaved exactly
+  like the normal one, and re-applying WhatsApp's `MessagingStyle` plus `WearableExtender`
+  changed nothing. The forwarded reply action stays because it works from the phone's
+  shade, but do not build another workaround for the watch.
+- **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
+  the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
+  switch that required it silently dropped real messages. It is logged, not acted on.
 
 ### Non-negotiables
 

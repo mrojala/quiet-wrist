@@ -2,6 +2,8 @@ package com.mrojala.quietwrist
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import java.text.SimpleDateFormat
@@ -25,11 +27,17 @@ class RelayService : NotificationListenerService() {
     /** Last message relayed per notification key, to skip WhatsApp's re-posts. */
     private val lastRelayed = HashMap<String, String>()
 
+    /** Relays waiting out [COALESCE_MS], keyed by notification key. */
+    private val pending = HashMap<String, Pending>()
+    private val handler = Handler(Looper.getMainLooper())
+
     override fun onListenerConnected() {
         Prefs.log(this, "${stamp()}  ——  listener connected")
     }
 
     override fun onListenerDisconnected() {
+        pending.values.forEach { handler.removeCallbacks(it.post) }
+        pending.clear()
         Prefs.log(this, "${stamp()}  ——  listener DISCONNECTED")
     }
 
@@ -72,20 +80,76 @@ class RelayService : NotificationListenerService() {
             return
         }
 
-        // WhatsApp updates the same notification key for every new message in a
-        // chat, so relay once per distinct message rather than per update.
-        val fingerprint = "${notification.`when`}|$title|$text"
-        if (lastRelayed.put(sbn.key, fingerprint) == fingerprint) {
-            record("dup   ", detail, title)
+        schedule(sbn.key, title, text, notification, detail)
+    }
+
+    /**
+     * Holds a relay briefly so a burst of updates to one chat becomes one buzz.
+     *
+     * WhatsApp re-posts the same notification key as a message lands, as its text
+     * grows (a streaming bot reply arrives in pieces), and as delivery state
+     * changes. Each of those carries different text, so a content fingerprint alone
+     * sees three new messages and buzzes three times.
+     *
+     * Waiting [COALESCE_MS] and relaying only the settled version costs an
+     * imperceptible delay and no battery — it is one main-looper message, not a
+     * wake lock or an alarm.
+     */
+    private fun schedule(
+        key: String,
+        title: String,
+        text: String,
+        notification: Notification,
+        detail: String,
+    ) {
+        val existing = pending[key]
+        if (existing != null) {
+            handler.removeCallbacks(existing.post)
+            existing.title = title
+            existing.text = text
+            existing.notification = notification
+            existing.detail = detail
+            existing.updates++
+            handler.postDelayed(existing.post, COALESCE_MS)
             return
         }
 
-        Relay.post(this, title.ifEmpty { "WhatsApp" }, text, notification)
-        record("RELAY ", detail, title)
+        val entry = Pending(title, text, notification, detail, Runnable { fire(key) })
+        pending[key] = entry
+        handler.postDelayed(entry.post, COALESCE_MS)
+    }
+
+    private fun fire(key: String) {
+        val entry = pending.remove(key) ?: return
+
+        // Guards against WhatsApp re-posting an identical notification later, which
+        // the coalescing window is too short to catch.
+        val fingerprint = "${entry.notification.`when`}|${entry.title}|${entry.text}"
+        if (lastRelayed.put(key, fingerprint) == fingerprint) {
+            record("dup   ", entry.detail, entry.title)
+            return
+        }
+
+        Relay.post(this, entry.title.ifEmpty { "WhatsApp" }, entry.text, entry.notification)
+        val collapsed = if (entry.updates > 1) " ·${entry.updates} updates coalesced" else ""
+        record("RELAY ", entry.detail + collapsed, entry.title)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
-        if (sbn != null) lastRelayed.remove(sbn.key)
+        val key = sbn?.key ?: return
+        lastRelayed.remove(key)
+        // A notification dismissed inside the window was read elsewhere; don't buzz.
+        pending.remove(key)?.let { handler.removeCallbacks(it.post) }
+    }
+
+    private class Pending(
+        var title: String,
+        var text: String,
+        var notification: Notification,
+        var detail: String,
+        val post: Runnable,
+    ) {
+        var updates: Int = 1
     }
 
     /** @return why this notification is not relayed, or null to relay it. */
@@ -118,6 +182,9 @@ class RelayService : NotificationListenerService() {
 
     companion object {
         const val WHATSAPP_PACKAGE = "com.whatsapp"
+
+        /** Long enough to swallow a burst of updates, short enough to feel instant. */
+        private const val COALESCE_MS = 900L
 
         private const val UNKNOWN_IMPORTANCE = Int.MIN_VALUE
         private val TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.US)
