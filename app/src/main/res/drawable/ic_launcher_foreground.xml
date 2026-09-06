@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Straps -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,24h16v12h-16z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,72h16v12h-16z" />
+    <!-- Watch body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-24,0a24,24 0 1,0 48,0a24,24 0 1,0 -48,0" />
+    <!-- Face -->
+    <path
+        android:fillColor="#1F3A5F"
+        android:pathData="M54,54m-17,0a17,17 0 1,0 34,0a17,17 0 1,0 -34,0" />
+    <!-- Single quiet dot: one notification got through -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+</vector>
