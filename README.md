@@ -110,13 +110,48 @@ Two things were tried and failed:
 - **Looking like a real chat message.** Re-applying WhatsApp's `MessagingStyle` and the
   wearable action list changes nothing, because Huawei Health does not inspect the
   notification.
-- **A `com.whatsapp.quietwrist` application id.** Built as a second product flavor to
-  test whether the quick-reply whitelist was a prefix match. It is not — the check is an
-  exact package-name match, and this build behaved identically to the standard one. The
-  flavor has been removed.
+- **A `com.whatsapp.quietwrist` application id.** Built to test whether the quick-reply
+  whitelist was a prefix match. It is not — the check is an exact package-name match, and
+  this build behaved identically to the standard one.
 
-The only way to keep wrist replies is to leave WhatsApp enabled in Huawei Health, which
-is the setup this app exists to escape.
+### The identity experiment
+
+[Huawei's own documentation][huawei-reply] names exactly four repliable sources: **SMS,
+WhatsApp, Messenger, Telegram**. So the whitelist is short and exact — which means the
+remaining idea is to build QuietWrist *under one of those package names*.
+
+The reasoning that makes this more than a guess: replying to another app's notification
+is only possible through `RemoteInput` and its `PendingIntent`. Android offers no other
+mechanism, so Huawei Health cannot have a Messenger-specific reply path — it must fire
+the action attached to the notification. That action is WhatsApp's, forwarded by
+QuietWrist. If the whitelist opens the reply UI, the reply should reach the right chat.
+
+Candidates, cheapest first — the package must **not** already be installed, since Android
+refuses two apps sharing an application id:
+
+| Package | Cost |
+| --- | --- |
+| `com.whatsapp.w4b` | Free, if WhatsApp Business isn't installed |
+| `org.thunderdog.challegram` | Free, if Telegram X isn't installed |
+| `org.telegram.messenger` | Requires uninstalling Telegram |
+| `com.facebook.orca` | Requires uninstalling Messenger |
+
+Build one with the `application_id` input on the **Build APK** workflow:
+
+```bash
+gh workflow run build.yml --repo mrojala/quiet-wrist --ref main \
+  -f application_id=com.whatsapp.w4b
+```
+
+It publishes to the separate `experiment` release as `QuietWrist-EXP.apk`, installs as
+a second app named "QuietWrist EXP", and never touches `latest`. Grant notification
+access to only one QuietWrist at a time or every message relays twice.
+
+If one works, the cost is permanent: you can never install the real app whose name you
+took. And no build carrying a borrowed package name can ever go to the Play Store — that
+is squarely against Google's impersonation policy.
+
+[huawei-reply]: https://consumer.huawei.com/en/support/content/en-us15958509/
 
 ## Build
 
