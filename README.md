@@ -66,13 +66,20 @@ relayed or skipped, with the importance level and channel id. That is the fastes
 way to find out why something did or didn't reach the watch — `adb logcat` isn't an
 option when the phone is in your pocket.
 
-Two switches:
+Switches, all off by default:
 
-- **Require actual sound/vibration** — additionally require that the system says the
-  notification really alerted (`Ranking.getLastAudiblyAlertedMillis()`). Stricter, but
-  relays nothing while the ringer is silenced or Do Not Disturb is on. Off by default.
 - **Vibrate the phone too** — posts the relay on a high-importance channel instead of
-  the silent one. Off by default.
+  the silent one.
+- **Relay everything (debug)** — ignores the filter and relays every WhatsApp message.
+  Separates "the filter rejected it" from "the relay never reached the watch".
+- **Log every app (debug)** — logs notifications from all packages without relaying
+  them, so you can confirm the listener is receiving anything at all without waiting
+  for someone to message you.
+
+The log records `audible=` from `Ranking.getLastAudiblyAlertedMillis()`, but **nothing
+filters on it**. The system stamps that field around the same moment listeners are
+notified, so it frequently reads `false` for a notification that did vibrate. An earlier
+version had a switch to require it and that switch silently ate real messages.
 
 ## Battery
 
