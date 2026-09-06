@@ -59,11 +59,14 @@ class RelayService : NotificationListenerService() {
         val detail = buildString {
             append("imp=").append(importanceName(importance))
             append(" ch=").append(notification.channelId ?: "-")
+            // Informational only. The system stamps this around the time listeners
+            // are notified, so it frequently reads false for a notification that
+            // did vibrate. Never filter on it.
             append(" audible=").append(alertedAt > 0L)
             append(" flags=").append(flagNames(notification.flags))
         }
 
-        val rejection = reasonToSkip(notification, text, hasRanking, importance, alertedAt)
+        val rejection = reasonToSkip(notification, text, hasRanking, importance)
         if (rejection != null) {
             record("skip  ", "$rejection · $detail", title)
             return
@@ -91,7 +94,6 @@ class RelayService : NotificationListenerService() {
         text: String,
         hasRanking: Boolean,
         importance: Int,
-        alertedAt: Long,
     ): String? {
         // The group summary duplicates the per-chat notifications underneath it.
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return "group summary"
@@ -107,7 +109,6 @@ class RelayService : NotificationListenerService() {
         // A chat muted in WhatsApp is posted on a low-importance channel, so it
         // never alerts. That importance is the signal we filter on.
         if (importance < NotificationManager.IMPORTANCE_DEFAULT) return "silent channel"
-        if (Prefs.requireAudible(this) && alertedAt <= 0L) return "did not alert"
         return null
     }
 

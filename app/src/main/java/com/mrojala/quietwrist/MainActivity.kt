@@ -76,17 +76,6 @@ class MainActivity : Activity() {
 
         root.addView(spacer(8))
         root.addView(
-            switch("Require actual sound/vibration", Prefs.requireAudible(this)) { on ->
-                Prefs.setRequireAudible(this, on)
-            }
-        )
-        root.addView(
-            hint(
-                "Stricter, but relays nothing while the ringer is silenced or Do Not " +
-                    "Disturb is on."
-            )
-        )
-        root.addView(
             switch("Vibrate the phone too", Prefs.vibratePhone(this)) { on ->
                 Prefs.setVibratePhone(this, on)
             }
