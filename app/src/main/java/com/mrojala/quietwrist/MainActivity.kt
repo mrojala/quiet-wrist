@@ -2,12 +2,13 @@ package com.mrojala.quietwrist
 
 import android.Manifest
 import android.app.Activity
-import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.service.notification.NotificationListenerService
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
@@ -63,6 +64,15 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Test notification posted", Toast.LENGTH_SHORT).show()
             }
         )
+        root.addView(
+            button("Reconnect the listener") {
+                // One UI sometimes leaves the listener unbound after an update.
+                NotificationListenerService.requestRebind(
+                    ComponentName(this, RelayService::class.java)
+                )
+                Toast.makeText(this, "Rebind requested", Toast.LENGTH_SHORT).show()
+            }
+        )
 
         root.addView(spacer(8))
         root.addView(
@@ -82,6 +92,28 @@ class MainActivity : Activity() {
             }
         )
         root.addView(hint("Off means only the watch buzzes."))
+        root.addView(
+            switch("Relay everything (debug)", Prefs.relayEverything(this)) { on ->
+                Prefs.setRelayEverything(this, on)
+            }
+        )
+        root.addView(
+            hint(
+                "Ignores the filter and relays every WhatsApp message. Use it to tell " +
+                    "\"the filter rejected it\" apart from \"the relay never reached the watch\"."
+            )
+        )
+        root.addView(
+            switch("Log every app (debug)", Prefs.logAllApps(this)) { on ->
+                Prefs.setLogAllApps(this, on)
+            }
+        )
+        root.addView(
+            hint(
+                "Logs notifications from all apps without relaying them, so you can " +
+                    "confirm the listener is receiving anything at all."
+            )
+        )
 
         root.addView(spacer(16))
         root.addView(heading("Recent decisions"))
@@ -91,15 +123,6 @@ class MainActivity : Activity() {
             typeface = Typeface.MONOSPACE
             setTextColor(Color.DKGRAY)
         }
-        root.addView(
-            ScrollView(this).apply {
-                addView(logView)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                ).apply { weight = 1f }
-            }
-        )
 
         val logButtons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         logButtons.addView(button("Refresh") { refresh() }, rowParams())
@@ -111,8 +134,21 @@ class MainActivity : Activity() {
             rowParams(),
         )
         root.addView(logButtons)
+        root.addView(logView)
 
-        setContentView(root)
+        // One scrolling page rather than a scrolling log inside a fixed frame: the
+        // controls alone are taller than a phone screen.
+        setContentView(
+            ScrollView(this).apply {
+                addView(
+                    root,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            }
+        )
         requestPostNotifications()
     }
 
@@ -127,16 +163,21 @@ class MainActivity : Activity() {
         val canPost = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
 
+        val lines = Prefs.readLog(this)
+        val connected = lines.any { it.contains("listener connected") }
+
         status.text = buildString {
             appendLine(mark(listenerOn) + " Notification access")
+            appendLine(mark(connected) + " Listener has connected")
             appendLine(mark(canPost) + " Permission to post notifications")
             append(mark(whatsAppInstalled) + " WhatsApp installed")
-            if (!listenerOn) {
-                append("\n\nGrant notification access to start relaying.")
+            when {
+                !listenerOn -> append("\n\nGrant notification access to start relaying.")
+                !connected -> append("\n\nAccess is granted but the service never bound. " +
+                    "Tap “Reconnect the listener”.")
             }
         }
 
-        val lines = Prefs.readLog(this)
         logView.text = if (lines.isEmpty()) {
             "Nothing yet. Send yourself a WhatsApp message, then tap Refresh."
         } else {
