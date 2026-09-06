@@ -30,6 +30,7 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var logView: TextView
+    private lateinit var dismissButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +82,28 @@ class MainActivity : Activity() {
             }
         )
         root.addView(hint("Off means only the watch buzzes."))
+
+        dismissButton = button("") { cycleDismissDelay() }
+        root.addView(dismissButton)
+        root.addView(
+            hint(
+                "Relayed notifications clear themselves after this long. Huawei Health " +
+                    "mirrors the dismissal, so the message leaves the watch at the same " +
+                    "time — hence a delay rather than clearing it straight away."
+            )
+        )
+        root.addView(
+            switch("Also clear WhatsApp's own notification", Prefs.clearOriginal(this)) { on ->
+                Prefs.setClearOriginal(this, on)
+            }
+        )
+        root.addView(
+            hint(
+                "Stops one message sitting in the shade twice, on the same delay. Off by " +
+                    "default: it removes the copy you'd otherwise catch up on from the phone."
+            )
+        )
+
         root.addView(
             switch("Relay everything (debug)", Prefs.relayEverything(this)) { on ->
                 Prefs.setRelayEverything(this, on)
@@ -152,6 +175,8 @@ class MainActivity : Activity() {
         val canPost = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
 
+        dismissButton.text = dismissLabel()
+
         val lines = Prefs.readLog(this)
         val connected = lines.any { it.contains("listener connected") }
 
@@ -172,6 +197,20 @@ class MainActivity : Activity() {
         } else {
             lines.joinToString("\n")
         }
+    }
+
+    /** A cycling button rather than a spinner — six values, one control. */
+    private fun cycleDismissDelay() {
+        val choices = Prefs.DISMISS_CHOICES
+        val next = choices[(choices.indexOf(Prefs.dismissMinutes(this)) + 1) % choices.size]
+        Prefs.setDismissMinutes(this, next)
+        refresh()
+    }
+
+    private fun dismissLabel(): String = when (val minutes = Prefs.dismissMinutes(this)) {
+        0 -> "Auto-dismiss: never"
+        60 -> "Auto-dismiss: 1 hour"
+        else -> "Auto-dismiss: $minutes min"
     }
 
     private fun requestPostNotifications() {

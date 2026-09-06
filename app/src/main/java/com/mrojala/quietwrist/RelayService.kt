@@ -131,8 +131,24 @@ class RelayService : NotificationListenerService() {
         }
 
         Relay.post(this, entry.title.ifEmpty { "WhatsApp" }, entry.text, entry.notification)
+        scheduleOriginalCleanup(key)
         val collapsed = if (entry.updates > 1) " ·${entry.updates} updates coalesced" else ""
         record("RELAY ", entry.detail + collapsed, entry.title)
+    }
+
+    /**
+     * Clears WhatsApp's own notification on the same delay as the relay, so one
+     * message doesn't sit in the shade twice.
+     *
+     * Best effort by design: a plain delayed message on the main looper, so it is
+     * simply lost if the process is killed first. Using an alarm to guarantee it
+     * would trade the app's zero background cost for tidying up a notification.
+     */
+    private fun scheduleOriginalCleanup(key: String) {
+        if (!Prefs.clearOriginal(this)) return
+        val minutes = Prefs.dismissMinutes(this)
+        if (minutes <= 0) return
+        handler.postDelayed({ cancelNotification(key) }, minutes * 60_000L)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?) {

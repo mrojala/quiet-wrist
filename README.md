@@ -63,8 +63,18 @@ relayed or skipped, with the importance level and channel id. That is the fastes
 way to find out why something did or didn't reach the watch — `adb logcat` isn't an
 option when the phone is in your pocket.
 
-Switches, all off by default:
+Controls:
 
+- **Auto-dismiss** — how long a relayed notification stays before clearing itself.
+  Defaults to 10 minutes; cycles through 1/5/10/30/60 minutes and never. Huawei Health
+  mirrors dismissals, so the message leaves the watch at the same moment — which is why
+  this is a delay rather than clearing the relay as soon as it is delivered. The system
+  performs the expiry itself (`setTimeoutAfter`), so it costs nothing and survives the
+  process being killed.
+- **Also clear WhatsApp's own notification** — clears the original on the same delay so
+  one message doesn't sit in the shade twice. Off by default, because it removes the copy
+  you'd otherwise catch up on from the phone. Best effort: it is a delayed callback, so a
+  killed process skips it.
 - **Vibrate the phone too** — posts the relay on a high-importance channel instead of
   the silent one.
 - **Relay everything (debug)** — ignores the filter and relays every WhatsApp message.
