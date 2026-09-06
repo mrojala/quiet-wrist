@@ -22,11 +22,18 @@ See `README.md` for the mechanism and the device setup.
 
 ### Settled questions — do not re-litigate
 
-- **Replying from the watch is impossible.** Huawei Health gates quick reply on an exact
-  package-name match. Tested: a `com.whatsapp.quietwrist` application id behaved exactly
-  like the normal one, and re-applying WhatsApp's `MessagingStyle` plus `WearableExtender`
-  changed nothing. The forwarded reply action stays because it works from the phone's
-  shade, but do not build another workaround for the watch.
+- **Huawei Health gates quick reply on an exact package-name match.** Tested: a
+  `com.whatsapp.quietwrist` application id behaved exactly like the normal one, and
+  re-applying WhatsApp's `MessagingStyle` plus `WearableExtender` changed nothing — it
+  does not inspect the notification. The forwarded reply action stays because it works
+  from the phone's shade. Do not attempt prefix tricks or notification-shape tricks again.
+  The one avenue still open is the identity experiment below.
+- **The identity experiment.** Huawei documents exactly four repliable sources: SMS,
+  WhatsApp, Messenger, Telegram. Building under one of those package names is the
+  remaining idea, and it is plausible because replying to a foreign notification is only
+  possible via `RemoteInput` + `PendingIntent` — Huawei cannot have a per-app reply path.
+  Drive it with the `application_id` input on the build workflow; it publishes to the
+  `experiment` release, never to `latest`. Record the outcome here.
 - **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
   the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
   switch that required it silently dropped real messages. It is logged, not acted on.

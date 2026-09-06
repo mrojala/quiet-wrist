@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      application_id:
+        description: >-
+          Experiment only: build under this application id instead of
+          com.mrojala.quietwrist, to borrow the identity of an app on Huawei
+          Health's quick-reply whitelist. Publishes to the separate "experiment"
+          release and never touches "latest". Leave blank for a normal build.
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -44,6 +53,7 @@ jobs:
       - name: Assemble release APK
         env:
           VERSION_CODE: ${{ github.run_number }}
+          APPLICATION_ID: ${{ inputs.application_id }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: quietwrist
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -53,21 +63,28 @@ jobs:
       # piling up, and the download link never changes. The version is in the
       # release notes and on the app's own screen.
       - name: Collect the APK
+        id: apk
         run: |
           mkdir -p out
           apk=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          cp "$apk" out/QuietWrist.apk
+          if [ -n "${{ inputs.application_id }}" ]; then
+            name=QuietWrist-EXP.apk
+          else
+            name=QuietWrist.apk
+          fi
+          cp "$apk" "out/$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: QuietWrist-apk
-          path: out/QuietWrist.apk
+          path: out/${{ steps.apk.outputs.name }}
 
       # One stable URL to open on the phone:
       # https://github.com/mrojala/quiet-wrist/releases/latest
       - name: Publish to the rolling "latest" release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && inputs.application_id == ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
@@ -79,3 +96,24 @@ jobs:
             upgrades any previous version in place.
           make_latest: true
           files: out/QuietWrist.apk
+
+      # Kept off "latest" so the normal install link is never an experiment.
+      - name: Publish the experiment build
+        if: inputs.application_id != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: experiment
+          name: Experiment build
+          body: |
+            QuietWrist **0.1.${{ github.run_number }}** built as
+            `${{ inputs.application_id }}`, from `${{ github.sha }}`.
+
+            Testing whether Huawei Health opens quick reply for this package name.
+            Installs as a **separate app** called "QuietWrist EXP" — grant
+            notification access to only one QuietWrist at a time, or every message
+            relays twice.
+
+            Sideload only. Never publish a build from this release anywhere.
+          prerelease: true
+          make_latest: false
+          files: out/QuietWrist-EXP.apk
