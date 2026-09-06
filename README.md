@@ -29,8 +29,11 @@ doesn't double-alert.
 ## Install
 
 1. Open **https://github.com/mrojala/quiet-wrist/releases/latest** on the phone.
-2. Tap the `QuietWrist-*.apk` asset. Chrome will ask to allow installs from this
-   source — allow it, then install.
+2. Tap the **`QuietWrist-standard-*.apk`** asset. Chrome will ask to allow installs
+   from this source — allow it, then install.
+
+(`QuietWrist-masquerade-*.apk` is the quick-reply experiment described below. It
+installs alongside the standard build; ignore it unless you're testing that.)
 
 Every push to `main` rebuilds and replaces that release, so the URL is permanent.
 Builds are signed with a stable key, so later versions install straight over the
@@ -84,16 +87,31 @@ is why the battery-optimisation exemption above matters.
 
 ## Replying from the watch
 
-QuietWrist forwards WhatsApp's own reply action (its `RemoteInput` and `PendingIntent`)
-onto the relayed notification, so replying from the phone's notification shade sends the
-message as WhatsApp.
+Expect to lose wrist replies in exchange for the quiet. Huawei Health whitelists quick
+reply by **package name** (`com.whatsapp`, `org.telegram.messenger`, …), so anything
+QuietWrist posts is most likely shown as a plain, non-repliable notification. The only
+guaranteed way to keep replies is to leave WhatsApp enabled in Huawei Health — which is
+the setup you're trying to get away from.
 
-Whether that reaches the **watch** is up to Huawei Health, which whitelists quick reply
-by package name (`com.whatsapp`, `org.telegram.messenger`, …). A third-party package is
-very likely shown as a plain, non-repliable notification. Attaching the action costs
-nothing, so it is there if Huawei ever loosens this — but plan on losing wrist replies
-in exchange for the quiet. The only way to keep them is to leave WhatsApp enabled in
-Huawei Health, which is the setup you're trying to get away from.
+That said, three things are stacked in the app to give it the best shot, since none of
+them cost anything:
+
+1. **The reply action is forwarded verbatim.** WhatsApp's `RemoteInput` and its
+   `PendingIntent` are copied onto the relay. A `PendingIntent` is just a token, so
+   firing it sends the message *as WhatsApp*. Replying from the phone's shade already
+   works because of this.
+2. **The relay is posted as a real conversation.** The original `MessagingStyle` —
+   sender, group name, message history — is extracted and re-applied, and the action is
+   also added to the `WearableExtender` list. Companion apps that decide by inspecting
+   the notification, rather than by package name, see a genuine chat message.
+3. **A `masquerade` build.** Same app under the application id `com.whatsapp.quietwrist`.
+   If Huawei Health's whitelist check is a prefix or substring match rather than an exact
+   one, this build inherits WhatsApp's privileges. Install it next to the standard build
+   and compare. It is a coin flip on someone else's implementation detail — most such
+   checks are exact — but it costs one CI build to find out.
+
+The masquerade flavor is for your own phone only. It can never go to the Play Store: a
+package name that reads as WhatsApp's is squarely against Google's impersonation policy.
 
 ## Build
 
