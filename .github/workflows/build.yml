@@ -49,20 +49,20 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease
 
-      - name: Collect and name the APKs
+      # A fixed filename, so each build replaces the previous asset instead of
+      # piling up, and the download link never changes. The version is in the
+      # release notes and on the app's own screen.
+      - name: Collect the APK
         run: |
           mkdir -p out
-          for apk in $(find app/build/outputs/apk -name '*-release.apk'); do
-            # .../apk/<flavor>/release/app-<flavor>-release.apk
-            flavor=$(basename "$(dirname "$(dirname "$apk")")")
-            cp "$apk" "out/QuietWrist-$flavor-0.1.${{ github.run_number }}.apk"
-          done
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          cp "$apk" out/QuietWrist.apk
           ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: QuietWrist-apk
-          path: out/*.apk
+          path: out/QuietWrist.apk
 
       # One stable URL to open on the phone:
       # https://github.com/mrojala/quiet-wrist/releases/latest
@@ -73,13 +73,9 @@ jobs:
           tag_name: latest
           name: Latest build
           body: |
-            Newest QuietWrist build from `main` (${{ github.sha }}).
+            QuietWrist **0.1.${{ github.run_number }}** — built from `main` (${{ github.sha }}).
 
-            Open this page on the phone and tap an `.apk` to install.
-
-            - `QuietWrist-standard-*.apk` — the one to use.
-            - `QuietWrist-masquerade-*.apk` — same app under the application id
-              `com.whatsapp.quietwrist`, to test whether Huawei Health's quick-reply
-              whitelist is a prefix match. Installs alongside the standard build.
+            Open this page on the phone and tap `QuietWrist.apk` to install. It
+            upgrades any previous version in place.
           make_latest: true
-          files: out/*.apk
+          files: out/QuietWrist.apk
