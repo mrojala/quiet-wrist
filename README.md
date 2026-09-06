@@ -29,11 +29,8 @@ doesn't double-alert.
 ## Install
 
 1. Open **https://github.com/mrojala/quiet-wrist/releases/latest** on the phone.
-2. Tap the **`QuietWrist-standard-*.apk`** asset. Chrome will ask to allow installs
-   from this source — allow it, then install.
-
-(`QuietWrist-masquerade-*.apk` is the quick-reply experiment described below. It
-installs alongside the standard build; ignore it unless you're testing that.)
+2. Tap **`QuietWrist.apk`**. Chrome will ask to allow installs from this source —
+   allow it, then install.
 
 Every push to `main` rebuilds and replaces that release, so the URL is permanent.
 Builds are signed with a stable key, so later versions install straight over the
@@ -76,6 +73,11 @@ Switches, all off by default:
   them, so you can confirm the listener is receiving anything at all without waiting
   for someone to message you.
 
+A burst of updates to one chat within 900 ms is coalesced into a single relay, and the
+log says how many were folded in. WhatsApp re-posts the same notification as a message
+lands, as its text grows (a streaming bot reply arrives in pieces), and as delivery
+state changes; without this, one message buzzed the watch three times.
+
 The log records `audible=` from `Ranking.getLastAudiblyAlertedMillis()`, but **nothing
 filters on it**. The system stamps that field around the same moment listeners are
 notified, so it frequently reads `false` for a notification that did vibrate. An earlier
@@ -94,31 +96,27 @@ is why the battery-optimisation exemption above matters.
 
 ## Replying from the watch
 
-Expect to lose wrist replies in exchange for the quiet. Huawei Health whitelists quick
-reply by **package name** (`com.whatsapp`, `org.telegram.messenger`, …), so anything
-QuietWrist posts is most likely shown as a plain, non-repliable notification. The only
-guaranteed way to keep replies is to leave WhatsApp enabled in Huawei Health — which is
-the setup you're trying to get away from.
+**You can't.** That is the price of the quiet, and it has now been tested rather than
+assumed.
 
-That said, three things are stacked in the app to give it the best shot, since none of
-them cost anything:
+The app still forwards WhatsApp's own reply action — its `RemoteInput` and
+`PendingIntent`, which is only a token, so firing it sends the message *as WhatsApp* —
+and posts the relay as a genuine `MessagingStyle` conversation with that action mirrored
+into `WearableExtender`. This does make the relay repliable **from the phone's
+notification shade**. Huawei Health still renders it on the watch as plain text.
 
-1. **The reply action is forwarded verbatim.** WhatsApp's `RemoteInput` and its
-   `PendingIntent` are copied onto the relay. A `PendingIntent` is just a token, so
-   firing it sends the message *as WhatsApp*. Replying from the phone's shade already
-   works because of this.
-2. **The relay is posted as a real conversation.** The original `MessagingStyle` —
-   sender, group name, message history — is extracted and re-applied, and the action is
-   also added to the `WearableExtender` list. Companion apps that decide by inspecting
-   the notification, rather than by package name, see a genuine chat message.
-3. **A `masquerade` build.** Same app under the application id `com.whatsapp.quietwrist`.
-   If Huawei Health's whitelist check is a prefix or substring match rather than an exact
-   one, this build inherits WhatsApp's privileges. Install it next to the standard build
-   and compare. It is a coin flip on someone else's implementation detail — most such
-   checks are exact — but it costs one CI build to find out.
+Two things were tried and failed:
 
-The masquerade flavor is for your own phone only. It can never go to the Play Store: a
-package name that reads as WhatsApp's is squarely against Google's impersonation policy.
+- **Looking like a real chat message.** Re-applying WhatsApp's `MessagingStyle` and the
+  wearable action list changes nothing, because Huawei Health does not inspect the
+  notification.
+- **A `com.whatsapp.quietwrist` application id.** Built as a second product flavor to
+  test whether the quick-reply whitelist was a prefix match. It is not — the check is an
+  exact package-name match, and this build behaved identically to the standard one. The
+  flavor has been removed.
+
+The only way to keep wrist replies is to leave WhatsApp enabled in Huawei Health, which
+is the setup this app exists to escape.
 
 ## Build
 
