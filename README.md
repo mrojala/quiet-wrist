@@ -100,9 +100,14 @@ lands, as its text grows (a streaming bot reply arrives in pieces), and as deliv
 state changes; without this, one message buzzed the watch three times.
 
 The log records `audible=` from `Ranking.getLastAudiblyAlertedMillis()`, but **nothing
-filters on it**. The system stamps that field around the same moment listeners are
-notified, so it frequently reads `false` for a notification that did vibrate. An earlier
-version had a switch to require it and that switch silently ate real messages.
+filters on it**. On this phone it has read `false` for every notification observed —
+hours of log, never once `true`, including relays that demonstrably buzzed the watch. An
+earlier version had a switch requiring it, and that switch silently ate real messages.
+
+Why it always reads `false` is not established. The likeliest explanation is that the
+system stamps the field around the same moment it notifies listeners, so a listener reads
+it before it is written — but that is a hypothesis, not something this project verified.
+The observation alone is reason enough not to filter on it.
 
 ## Battery
 
