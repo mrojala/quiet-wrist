@@ -72,9 +72,10 @@ class RelayService : NotificationListenerService() {
             append("imp=").append(importanceName(importance))
             append(" ch=").append(notification.channelId ?: "-")
             append(" vib=").append(channel?.shouldVibrate() ?: "?")
-            // Informational only. The system stamps this around the time listeners
-            // are notified, so it frequently reads false for a notification that
-            // did vibrate. Never filter on it.
+            // Logged, never filtered on: on this phone it has read false for every
+            // notification observed, including ones that demonstrably alerted. Why
+            // is unconfirmed — plausibly the system stamps it around the moment it
+            // notifies listeners, so we read it before it is written.
             append(" audible=").append(alertedAt > 0L)
             append(" flags=").append(flagNames(notification.flags))
         }

@@ -50,9 +50,13 @@ See `README.md` for the mechanism and the device setup.
   chat left audible with vibration off still arrives at `IMPORTANCE_DEFAULT` — only
   `NotificationChannel.shouldVibrate()` catches that one. `Ranking.getChannel()` is public
   API from 26, so it is available at `minSdk 29`.
-- **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
-  the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
-  switch that required it silently dropped real messages. It is logged, not acted on.
+- **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** Observed: it has read 0 for
+  every notification seen on this phone, including relayed ones that demonstrably alerted
+  the watch — an on-device log covering hours never once showed it non-zero. A switch that
+  required it silently dropped real messages. The cause is *not* established; the leading
+  guess is that the system stamps it around the moment it notifies listeners, so the
+  listener reads it before it is written. Treat the observation as settled and the
+  explanation as a hypothesis. It is logged, not acted on.
 
 ### Non-negotiables
 
