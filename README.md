@@ -134,8 +134,9 @@ looked sound: replying to another app's notification is only possible through
 reply path — it must fire whatever action the notification carries, and QuietWrist
 forwards WhatsApp's.
 
-It was tried with `com.whatsapp.w4b` and then, after uninstalling Messenger, with
-`com.facebook.orca`. **Both made things worse**, and the `orca` run isolated why:
+It was tried with `com.whatsapp.w4b`, and then — after uninstalling Messenger — with
+`com.facebook.orca`. The Huawei Health toggle was confirmed on for both, and the relay was
+confirmed posted on the phone in both. **Both made things worse**, and `orca` isolated why:
 
 | Build | Test notification | Relayed WhatsApp message |
 | --- | --- | --- |
@@ -148,9 +149,11 @@ a name it recognises, and a WhatsApp-shaped notification arriving under Messenge
 package fails whatever parsing that path does and is dropped. The generic path an unknown
 package gets is more permissive than the privileged one.
 
-**Borrowing a whitelisted package name costs delivery and buys nothing.** Do not retry it
-with the remaining candidates; the mechanism that defeats it does not depend on which
-name is used.
+**Borrowing a whitelisted package name costs delivery and buys nothing.** `com.whatsapp.w4b`
+was the strongest candidate — WhatsApp Business posts WhatsApp-shaped notifications, the
+exact shape QuietWrist relays — and it failed too. Do not retry with the remaining
+candidates: a Telegram parser would reject a WhatsApp-shaped notification for the same
+reason, and the mechanism that defeats this does not depend on which name is used.
 
 The `application_id` workflow input survives, since it is how the experiment was run and
 is the only way to reproduce the result:

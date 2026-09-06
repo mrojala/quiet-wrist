@@ -36,9 +36,14 @@ See `README.md` for the mechanism and the device setup.
   it. The generic path an unknown package gets is more permissive than the privileged one,
   so `com.mrojala.quietwrist` is the best identity available. The `application_id` workflow
   input stays only so the result can be reproduced.
-- **Reply from the watch is closed.** Every avenue has been tested: prefix matching,
-  notification shape, and borrowed identity. Do not open it again without new evidence
-  about how Huawei Health decides.
+  `com.whatsapp.w4b` was the strongest candidate — WhatsApp Business posts WhatsApp-shaped
+  notifications, the exact shape we relay — and it failed identically, with its toggle
+  confirmed on. Do not retry with Telegram or any other name.
+- **One untested avenue remains**, and it is the only design that preserves replying:
+  leave WhatsApp *enabled* in Huawei Health so native quick reply keeps working, and have
+  QuietWrist `cancelNotification()` the muted chats fast enough that the watch never
+  buzzes. It races Huawei's BLE push and will probably lose, but nothing else can give
+  both quiet and reply.
 - **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
   the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
   switch that required it silently dropped real messages. It is logged, not acted on.
