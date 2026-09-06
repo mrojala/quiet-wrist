@@ -49,18 +49,20 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease
 
-      - name: Name the APK after its version
-        id: apk
+      - name: Collect and name the APKs
         run: |
-          src=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          dest="QuietWrist-0.1.${{ github.run_number }}.apk"
-          cp "$src" "$dest"
-          echo "path=$dest" >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          for apk in $(find app/build/outputs/apk -name '*-release.apk'); do
+            # .../apk/<flavor>/release/app-<flavor>-release.apk
+            flavor=$(basename "$(dirname "$(dirname "$apk")")")
+            cp "$apk" "out/QuietWrist-$flavor-0.1.${{ github.run_number }}.apk"
+          done
+          ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: QuietWrist-apk
-          path: ${{ steps.apk.outputs.path }}
+          path: out/*.apk
 
       # One stable URL to open on the phone:
       # https://github.com/mrojala/quiet-wrist/releases/latest
@@ -73,6 +75,11 @@ jobs:
           body: |
             Newest QuietWrist build from `main` (${{ github.sha }}).
 
-            Open this page on the phone and tap the `.apk` to install.
+            Open this page on the phone and tap an `.apk` to install.
+
+            - `QuietWrist-standard-*.apk` — the one to use.
+            - `QuietWrist-masquerade-*.apk` — same app under the application id
+              `com.whatsapp.quietwrist`, to test whether Huawei Health's quick-reply
+              whitelist is a prefix match. Installs alongside the standard build.
           make_latest: true
-          files: ${{ steps.apk.outputs.path }}
+          files: out/*.apk

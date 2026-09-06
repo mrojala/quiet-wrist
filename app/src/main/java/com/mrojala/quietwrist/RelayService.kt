@@ -66,12 +66,7 @@ class RelayService : NotificationListenerService() {
         val fingerprint = "${notification.`when`}|$title|$text"
         if (lastRelayed.put(sbn.key, fingerprint) == fingerprint) return
 
-        // Hand WhatsApp's own reply action through, so the relay is at least
-        // repliable wherever the companion app allows it.
-        val replyAction = notification.actions
-            ?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
-
-        Relay.post(this, title.ifEmpty { "WhatsApp" }, text, replyAction)
+        Relay.post(this, title.ifEmpty { "WhatsApp" }, text, notification)
         record("relay", detail, title)
     }
 

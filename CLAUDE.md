@@ -20,6 +20,17 @@ See `README.md` for the mechanism and the device setup.
 - `Prefs.kt` — two settings plus the on-device decision log.
 - `MainActivity.kt` — setup and diagnostics screen, built programmatically.
 
+### Product flavors
+
+Two, on the `identity` dimension, differing only in application id:
+
+- `standard` → `com.mrojala.quietwrist`. The real build.
+- `masquerade` → `com.whatsapp.quietwrist`. An experiment to see whether Huawei Health's
+  quick-reply whitelist is a prefix match. Sideload-only — it must never be published,
+  and `app_name` must keep saying QuietWrist so it is never mistaken for WhatsApp itself.
+
+`app_name` comes from `resValue` per flavor, so there is no `res/values/strings.xml`.
+
 ### Non-negotiables
 
 - **No background work.** No polling, foreground services, wake locks, alarms, or network.

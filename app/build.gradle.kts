@@ -11,12 +11,30 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mrojala.quietwrist"
         // Ranking.getLastAudiblyAlertedMillis() is API 29.
         minSdk = 29
         targetSdk = 35
         versionCode = buildVersionCode
         versionName = "0.1.$buildVersionCode"
+    }
+
+    flavorDimensions += "identity"
+    productFlavors {
+        create("standard") {
+            dimension = "identity"
+            applicationId = "com.mrojala.quietwrist"
+            resValue("string", "app_name", "QuietWrist")
+        }
+        // An experiment, not a shipping variant. Companion apps such as Huawei
+        // Health allow quick reply per package name; if that check is a prefix or
+        // substring match rather than an exact one, this build inherits WhatsApp's
+        // privileges. Install it alongside `standard` and see which one the watch
+        // lets you reply from. Never publish this flavor anywhere.
+        create("masquerade") {
+            dimension = "identity"
+            applicationId = "com.whatsapp.quietwrist"
+            resValue("string", "app_name", "QuietWrist WA")
+        }
     }
 
     // Present only when the CI secrets are decoded into app/release.p12.
