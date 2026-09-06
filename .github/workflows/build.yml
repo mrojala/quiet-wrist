@@ -19,7 +19,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-${{ github.ref }}
+  # Keyed on the application id too: an experiment dispatch on main must not cancel
+  # the release build for a merge, which is what happens when both share a group.
+  group: build-${{ github.ref }}-${{ inputs.application_id || 'default' }}
   cancel-in-progress: true
 
 jobs:
