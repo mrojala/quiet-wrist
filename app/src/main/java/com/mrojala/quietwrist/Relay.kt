@@ -15,8 +15,6 @@ object Relay {
     const val CHANNEL_SILENT = "relay_silent"
     const val CHANNEL_ALERT = "relay_alert"
 
-    private const val TIMEOUT_MS = 10 * 60 * 1000L
-
     private var nextId = 1_000
 
     /**
@@ -43,8 +41,6 @@ object Relay {
             .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
-            // Relays are transient nudges; don't let them pile up in the shade.
-            .setTimeoutAfter(TIMEOUT_MS)
             .setStyle(messagingStyle(source, title, text))
             .setShowWhen(true)
 
@@ -62,6 +58,11 @@ object Relay {
         source?.actions
             ?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
             ?.let { addReplyAction(builder, it) }
+
+        // The system does the expiry itself, so this costs nothing and survives the
+        // process being killed. Huawei Health mirrors the dismissal to the watch.
+        val minutes = Prefs.dismissMinutes(context)
+        if (minutes > 0) builder.setTimeoutAfter(minutes * 60_000L)
 
         NotificationManagerCompat.from(context).notify(nextId++, builder.build())
     }
