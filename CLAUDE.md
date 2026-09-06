@@ -28,12 +28,17 @@ See `README.md` for the mechanism and the device setup.
   does not inspect the notification. The forwarded reply action stays because it works
   from the phone's shade. Do not attempt prefix tricks or notification-shape tricks again.
   The one avenue still open is the identity experiment below.
-- **The identity experiment.** Huawei documents exactly four repliable sources: SMS,
-  WhatsApp, Messenger, Telegram. Building under one of those package names is the
-  remaining idea, and it is plausible because replying to a foreign notification is only
-  possible via `RemoteInput` + `PendingIntent` — Huawei cannot have a per-app reply path.
-  Drive it with the `application_id` input on the build workflow; it publishes to the
-  `experiment` release, never to `latest`. Record the outcome here.
+- **Borrowing a whitelisted package name backfires — do not retry it.** Building under
+  `com.whatsapp.w4b` and then `com.facebook.orca` (Messenger uninstalled, Huawei toggle
+  confirmed on) did not unlock replies; it stopped relayed messages reaching the watch at
+  all, while a plain test notification from the same build still arrived. Huawei applies
+  package-specific parsing to names it recognises, and a WhatsApp-shaped notification fails
+  it. The generic path an unknown package gets is more permissive than the privileged one,
+  so `com.mrojala.quietwrist` is the best identity available. The `application_id` workflow
+  input stays only so the result can be reproduced.
+- **Reply from the watch is closed.** Every avenue has been tested: prefix matching,
+  notification shape, and borrowed identity. Do not open it again without new evidence
+  about how Huawei Health decides.
 - **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
   the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
   switch that required it silently dropped real messages. It is logged, not acted on.
