@@ -124,42 +124,49 @@ Two things were tried and failed:
   whitelist was a prefix match. It is not — the check is an exact package-name match, and
   this build behaved identically to the standard one.
 
-### The identity experiment
+### The identity experiment — tested, and it backfires
 
 [Huawei's own documentation][huawei-reply] names exactly four repliable sources: **SMS,
-WhatsApp, Messenger, Telegram**. So the whitelist is short and exact — which means the
-remaining idea is to build QuietWrist *under one of those package names*.
+WhatsApp, Messenger, Telegram**. So the whitelist is short and exact, and the obvious
+last idea was to build QuietWrist *under one of those package names*. The reasoning
+looked sound: replying to another app's notification is only possible through
+`RemoteInput` and its `PendingIntent`, so Huawei Health cannot hold a Messenger-specific
+reply path — it must fire whatever action the notification carries, and QuietWrist
+forwards WhatsApp's.
 
-The reasoning that makes this more than a guess: replying to another app's notification
-is only possible through `RemoteInput` and its `PendingIntent`. Android offers no other
-mechanism, so Huawei Health cannot have a Messenger-specific reply path — it must fire
-the action attached to the notification. That action is WhatsApp's, forwarded by
-QuietWrist. If the whitelist opens the reply UI, the reply should reach the right chat.
+It was tried with `com.whatsapp.w4b`, and then — after uninstalling Messenger — with
+`com.facebook.orca`. The Huawei Health toggle was confirmed on for both, and the relay was
+confirmed posted on the phone in both. **Both made things worse**, and `orca` isolated why:
 
-Candidates, cheapest first — the package must **not** already be installed, since Android
-refuses two apps sharing an application id:
+| Build | Test notification | Relayed WhatsApp message |
+| --- | --- | --- |
+| `com.mrojala.quietwrist` | reaches the watch | reaches the watch, no reply option |
+| `com.facebook.orca` | reaches the watch | **never reaches the watch** |
 
-| Package | Cost |
-| --- | --- |
-| `com.whatsapp.w4b` | Free, if WhatsApp Business isn't installed |
-| `org.thunderdog.challegram` | Free, if Telegram X isn't installed |
-| `org.telegram.messenger` | Requires uninstalling Telegram |
-| `com.facebook.orca` | Requires uninstalling Messenger |
+The Huawei Health toggle was confirmed on, and the relay was confirmed posted on the
+phone. So Huawei is not blocking the package — it applies *package-specific handling* to
+a name it recognises, and a WhatsApp-shaped notification arriving under Messenger's
+package fails whatever parsing that path does and is dropped. The generic path an unknown
+package gets is more permissive than the privileged one.
 
-Build one with the `application_id` input on the **Build APK** workflow:
+**Borrowing a whitelisted package name costs delivery and buys nothing.** `com.whatsapp.w4b`
+was the strongest candidate — WhatsApp Business posts WhatsApp-shaped notifications, the
+exact shape QuietWrist relays — and it failed too. Do not retry with the remaining
+candidates: a Telegram parser would reject a WhatsApp-shaped notification for the same
+reason, and the mechanism that defeats this does not depend on which name is used.
+
+The `application_id` workflow input survives, since it is how the experiment was run and
+is the only way to reproduce the result:
 
 ```bash
 gh workflow run build.yml --repo mrojala/quiet-wrist --ref main \
-  -f application_id=com.whatsapp.w4b
+  -f application_id=com.facebook.orca
 ```
 
-It publishes to the separate `experiment` release as `QuietWrist-EXP.apk`, installs as
-a second app named "QuietWrist EXP", and never touches `latest`. Grant notification
-access to only one QuietWrist at a time or every message relays twice.
-
-If one works, the cost is permanent: you can never install the real app whose name you
-took. And no build carrying a borrowed package name can ever go to the Play Store — that
-is squarely against Google's impersonation policy.
+It publishes to the separate `experiment` release as `QuietWrist-EXP.apk` and never
+touches `latest`. Grant notification access to only one QuietWrist at a time, or every
+message relays twice. No build carrying a borrowed package name can go to the Play Store
+— that is squarely against Google's impersonation policy.
 
 [huawei-reply]: https://consumer.huawei.com/en/support/content/en-us15958509/
 
