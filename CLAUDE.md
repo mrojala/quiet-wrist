@@ -44,6 +44,12 @@ See `README.md` for the mechanism and the device setup.
   QuietWrist `cancelNotification()` the muted chats fast enough that the watch never
   buzzes. It races Huawei's BLE push and will probably lose, but nothing else can give
   both quiet and reply.
+- **The filter needs both importance and channel vibration.** WhatsApp gives every chat
+  with custom notification settings its own channel (named after the JID, e.g.
+  `358504907785-1482932896@g.us_69`). A muted chat drops below `IMPORTANCE_DEFAULT`, but a
+  chat left audible with vibration off still arrives at `IMPORTANCE_DEFAULT` — only
+  `NotificationChannel.shouldVibrate()` catches that one. `Ranking.getChannel()` is public
+  API from 26, so it is available at `minSdk 29`.
 - **Never filter on `Ranking.getLastAudiblyAlertedMillis()`.** The system stamps it around
   the moment listeners are notified, so it reads 0 for notifications that did vibrate. A
   switch that required it silently dropped real messages. It is logged, not acted on.
