@@ -17,11 +17,16 @@ You cut Huawei Health off from WhatsApp and point it at QuietWrist instead:
 WhatsApp ──> Android notification ──> QuietWrist (filters) ──> new notification ──> Huawei Health ──> watch
 ```
 
-QuietWrist runs a `NotificationListenerService`, looks at each WhatsApp
-notification's **effective importance** (`Ranking.getImportance()`), and re-posts
-only the ones at `IMPORTANCE_DEFAULT` or above under its own package name. A chat
-you muted in WhatsApp is posted on a low-importance channel, so it is dropped and
-the watch never hears about it.
+QuietWrist runs a `NotificationListenerService` and re-posts, under its own package
+name, only the WhatsApp notifications that were meant to buzz. Two per-chat signals
+decide that, because WhatsApp gives every chat with custom notification settings its
+own notification channel, named after the chat's JID:
+
+- **`Ranking.getImportance()`** — a chat you *muted* arrives below
+  `IMPORTANCE_DEFAULT`, on WhatsApp's `silent_notifications` channel.
+- **`NotificationChannel.shouldVibrate()`** — a chat left audible but with
+  *vibration switched off* still arrives at `IMPORTANCE_DEFAULT`, so importance
+  alone lets it through. The channel's vibration setting is what catches it.
 
 The relay is posted on a **silent** channel by default: the watch buzzes, the phone
 doesn't double-alert.
@@ -53,8 +58,14 @@ In **Huawei Health → Notifications**:
 5. Turn **off** WhatsApp.
 6. Turn **on** QuietWrist.
 
-In **WhatsApp**: leave notifications on for everything, and mute the chats you don't
-want on your wrist. Muting is what QuietWrist filters on.
+In **WhatsApp**: leave notifications on for everything, and for the chats you don't
+want on your wrist either mute them or turn off their vibration under *Custom
+notifications*. Either is enough — those are the two signals QuietWrist filters on.
+
+Note that every relayed message appears in the phone's shade **twice**: WhatsApp's own
+notification and QuietWrist's copy. That is by design, since the original is what you
+catch up on from the phone. Turn on *Also clear WhatsApp's own notification* if you
+would rather not see both.
 
 ## Tuning
 

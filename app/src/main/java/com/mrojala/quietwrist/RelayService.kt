@@ -1,6 +1,7 @@
 package com.mrojala.quietwrist
 
 import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Handler
 import android.os.Looper
@@ -63,10 +64,14 @@ class RelayService : NotificationListenerService() {
         val hasRanking = rankingMap?.getRanking(sbn.key, ranking) == true
         val importance = if (hasRanking) ranking.importance else UNKNOWN_IMPORTANCE
         val alertedAt = if (hasRanking) ranking.lastAudiblyAlertedMillis else 0L
+        // WhatsApp gives every chat with custom notification settings its own
+        // channel, named after the chat's JID, so this is per-chat.
+        val channel = if (hasRanking) ranking.channel else null
 
         val detail = buildString {
             append("imp=").append(importanceName(importance))
             append(" ch=").append(notification.channelId ?: "-")
+            append(" vib=").append(channel?.shouldVibrate() ?: "?")
             // Informational only. The system stamps this around the time listeners
             // are notified, so it frequently reads false for a notification that
             // did vibrate. Never filter on it.
@@ -74,7 +79,7 @@ class RelayService : NotificationListenerService() {
             append(" flags=").append(flagNames(notification.flags))
         }
 
-        val rejection = reasonToSkip(notification, text, hasRanking, importance)
+        val rejection = reasonToSkip(notification, text, hasRanking, importance, channel)
         if (rejection != null) {
             record("skip  ", "$rejection · $detail", title)
             return
@@ -174,6 +179,7 @@ class RelayService : NotificationListenerService() {
         text: String,
         hasRanking: Boolean,
         importance: Int,
+        channel: NotificationChannel?,
     ): String? {
         // The group summary duplicates the per-chat notifications underneath it.
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return "group summary"
@@ -189,6 +195,11 @@ class RelayService : NotificationListenerService() {
         // A chat muted in WhatsApp is posted on a low-importance channel, so it
         // never alerts. That importance is the signal we filter on.
         if (importance < NotificationManager.IMPORTANCE_DEFAULT) return "silent channel"
+
+        // Importance alone misses a chat left audible but with vibration switched
+        // off: it still arrives at IMPORTANCE_DEFAULT. Vibration is a per-channel
+        // setting, and the point of this app is to relay only what buzzes.
+        if (channel != null && !channel.shouldVibrate()) return "vibration off"
         return null
     }
 
