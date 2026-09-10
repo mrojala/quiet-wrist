@@ -3,10 +3,16 @@ package com.mrojala.quietwrist
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,11 +38,39 @@ class RelayService : NotificationListenerService() {
     private val pending = HashMap<String, Pending>()
     private val handler = Handler(Looper.getMainLooper())
 
+    /**
+     * Clears the relays once the phone is unlocked: from then on WhatsApp's own
+     * notification is in front of you, so the copy on the wrist is redundant.
+     *
+     * Registered here rather than in the manifest — `ACTION_USER_PRESENT` is not
+     * deliverable to manifest receivers since Android 8. This service is already
+     * bound by the system for the app's whole life, so there is nothing extra to
+     * keep alive and no polling: it is one more callback.
+     */
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!Prefs.clearOnUnlock(this@RelayService)) return
+            val waiting = pending.size
+            pending.values.forEach { handler.removeCallbacks(it.post) }
+            pending.clear()
+            NotificationManagerCompat.from(this@RelayService).cancelAll()
+            val dropped = if (waiting > 0) ", $waiting pending dropped" else ""
+            Prefs.log(this@RelayService, "${stamp()}  ——  cleared on unlock$dropped")
+        }
+    }
+
     override fun onListenerConnected() {
+        ContextCompat.registerReceiver(
+            this,
+            unlockReceiver,
+            IntentFilter(Intent.ACTION_USER_PRESENT),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         Prefs.log(this, "${stamp()}  ——  listener connected")
     }
 
     override fun onListenerDisconnected() {
+        runCatching { unregisterReceiver(unlockReceiver) }
         pending.values.forEach { handler.removeCallbacks(it.post) }
         pending.clear()
         Prefs.log(this, "${stamp()}  ——  listener DISCONNECTED")
@@ -136,7 +170,18 @@ class RelayService : NotificationListenerService() {
             return
         }
 
-        Relay.post(this, entry.title.ifEmpty { "WhatsApp" }, entry.text, entry.notification)
+        // Posting re-uses WhatsApp's MessagingStyle, which carries its contact
+        // avatars and message history. That is another app's data of unknown size
+        // and shape, and notify() parcels the lot — so a bad notification must not
+        // be allowed to take the listener down with it. Whatever it throws is
+        // logged with its type, which is the only way to identify it from a phone.
+        try {
+            Relay.post(this, entry.title.ifEmpty { "WhatsApp" }, entry.text, entry.notification)
+        } catch (e: Throwable) {
+            record("FAILED", "${e.javaClass.simpleName}: ${e.message} · ${entry.detail}", entry.title)
+            return
+        }
+
         scheduleOriginalCleanup(key)
         val collapsed = if (entry.updates > 1) " ·${entry.updates} updates coalesced" else ""
         record("RELAY ", entry.detail + collapsed, entry.title)
