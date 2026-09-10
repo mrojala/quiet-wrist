@@ -17,7 +17,8 @@ See `README.md` for the mechanism and the device setup.
 - `RelayService.kt` — the `NotificationListenerService`; decides relay vs. skip.
 - `Relay.kt` — builds and posts QuietWrist's own notification, including the forwarded
   WhatsApp reply action.
-- `Prefs.kt` — two settings plus the on-device decision log.
+- `Prefs.kt` — the settings plus the on-device decision log.
+- `QuietWristApp.kt` — exists only to write crashes into that log.
 - `MainActivity.kt` — setup and diagnostics screen, built programmatically.
 
 ### Settled questions — do not re-litigate
@@ -64,6 +65,9 @@ See `README.md` for the mechanism and the device setup.
   The whole design is "wake on callback, do a few milliseconds of work, go back to sleep".
   Battery cost is the headline feature; do not regress it.
 - Every relay/skip decision must be recorded via `Prefs.log`. Tuning happens on-device.
+- **Nothing may crash the listener.** `notify()` re-posts another app's MessagingStyle,
+  including its avatars and history — unknown size and shape. Keep the post guarded and
+  log what it throws; a crash loop costs battery and silently stops relaying.
 
 ## Build & release
 

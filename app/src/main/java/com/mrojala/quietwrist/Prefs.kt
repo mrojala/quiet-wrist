@@ -15,6 +15,7 @@ object Prefs {
     private const val KEY_VIBRATE_PHONE = "vibrate_phone"
     private const val KEY_RELAY_EVERYTHING = "relay_everything"
     private const val KEY_LOG_ALL_APPS = "log_all_apps"
+    private const val KEY_CLEAR_ON_UNLOCK = "clear_on_unlock"
     private const val KEY_DISMISS_MINUTES = "dismiss_minutes"
     private const val KEY_CLEAR_ORIGINAL = "clear_original"
 
@@ -83,11 +84,31 @@ object Prefs {
     fun setClearOriginal(context: Context, value: Boolean) =
         prefs(context).edit().putBoolean(KEY_CLEAR_ORIGINAL, value).apply()
 
+    /**
+     * Clear relayed notifications as soon as the phone is unlocked. Once you are
+     * looking at the phone, WhatsApp's own notification is right there, so the copy
+     * on the wrist has done its job — and Huawei Health mirrors the dismissal.
+     */
+    fun clearOnUnlock(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CLEAR_ON_UNLOCK, true)
+
+    fun setClearOnUnlock(context: Context, value: Boolean) =
+        prefs(context).edit().putBoolean(KEY_CLEAR_ON_UNLOCK, value).apply()
+
     fun log(context: Context, line: String) {
-        val existing = readLog(context)
-        val trimmed = (listOf(line) + existing).take(LOG_LIMIT)
-        prefs(context).edit().putString(KEY_LOG, trimmed.joinToString(SEPARATOR)).apply()
+        prefs(context).edit().putString(KEY_LOG, appended(context, line)).apply()
     }
+
+    /**
+     * Like [log], but writes synchronously — for use from a crash handler, where
+     * the process is about to die and an async commit would be lost.
+     */
+    fun logBlocking(context: Context, line: String) {
+        prefs(context).edit().putString(KEY_LOG, appended(context, line)).commit()
+    }
+
+    private fun appended(context: Context, line: String): String =
+        (listOf(line) + readLog(context)).take(LOG_LIMIT).joinToString(SEPARATOR)
 
     /** Newest first. */
     fun readLog(context: Context): List<String> =

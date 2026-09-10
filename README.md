@@ -82,6 +82,12 @@ Controls:
   this is a delay rather than clearing the relay as soon as it is delivered. The system
   performs the expiry itself (`setTimeoutAfter`), so it costs nothing and survives the
   process being killed.
+- **Clear relays when I unlock the phone** — on by default. Once you're looking at the
+  phone, WhatsApp's own notification is right there, so the relay has done its job;
+  Huawei Health mirrors the dismissal and it leaves the watch too. Driven by
+  `ACTION_USER_PRESENT`, registered from the listener service (that broadcast is not
+  deliverable to manifest receivers since Android 8), so it is one more callback rather
+  than anything running in the background.
 - **Also clear WhatsApp's own notification** — clears the original on the same delay so
   one message doesn't sit in the shade twice. Off by default, because it removes the copy
   you'd otherwise catch up on from the phone. Best effort: it is a delayed callback, so a
@@ -93,6 +99,12 @@ Controls:
 - **Log every app (debug)** — logs notifications from all packages without relaying
   them, so you can confirm the listener is receiving anything at all without waiting
   for someone to message you.
+
+Crashes and failed posts land in the same log. `CRASH` lines come from an
+`Application`-level uncaught-exception handler, written synchronously so they survive the
+process dying; `FAILED` lines mean `notify()` threw and that one message was dropped
+rather than taking the listener down. Both carry the exception type — with no `adb
+logcat` available, that is the only way to identify a crash from the phone.
 
 A burst of updates to one chat within 900 ms is coalesced into a single relay, and the
 log says how many were folded in. WhatsApp re-posts the same notification as a message

@@ -93,6 +93,17 @@ class MainActivity : Activity() {
             )
         )
         root.addView(
+            switch("Clear relays when I unlock the phone", Prefs.clearOnUnlock(this)) { on ->
+                Prefs.setClearOnUnlock(this, on)
+            }
+        )
+        root.addView(
+            hint(
+                "Once you're looking at the phone, WhatsApp's own notification is right " +
+                    "there, so the copy on your wrist has done its job."
+            )
+        )
+        root.addView(
             switch("Also clear WhatsApp's own notification", Prefs.clearOriginal(this)) { on ->
                 Prefs.setClearOriginal(this, on)
             }
