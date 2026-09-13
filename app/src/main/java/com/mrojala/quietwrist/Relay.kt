@@ -26,12 +26,13 @@ object Relay {
      * inspecting the notification, and the closer the relay looks to a real chat
      * message the better its odds.
      */
+    /** @return the id it was posted under, so it can be cancelled individually. */
     fun post(
         context: Context,
         title: String,
         text: String,
         source: Notification? = null,
-    ) {
+    ): Int {
         createChannels(context)
 
         val channelId = if (Prefs.vibratePhone(context)) CHANNEL_ALERT else CHANNEL_SILENT
@@ -59,12 +60,11 @@ object Relay {
             ?.firstOrNull { it.remoteInputs?.isNotEmpty() == true }
             ?.let { addReplyAction(builder, it) }
 
-        // The system does the expiry itself, so this costs nothing and survives the
-        // process being killed. Huawei Health mirrors the dismissal to the watch.
-        val minutes = Prefs.dismissMinutes(context)
-        if (minutes > 0) builder.setTimeoutAfter(minutes * 60_000L)
-
-        NotificationManagerCompat.from(context).notify(nextId++, builder.build())
+        // No expiry timer: a relay is cleared by an event — you unlock the phone,
+        // you read the chat, or you tap it — not by the clock running out.
+        val id = nextId++
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+        return id
     }
 
     /**

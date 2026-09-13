@@ -18,6 +18,10 @@ See `README.md` for the mechanism and the device setup.
 - `Relay.kt` — builds and posts QuietWrist's own notification, including the forwarded
   WhatsApp reply action.
 - `Prefs.kt` — the settings plus the on-device decision log.
+- A relay is cleared by an **event**, never a timer: unlock, the source notification being
+  withdrawn, or a tap. An auto-dismiss delay and a "clear WhatsApp's own notification"
+  option both existed and were removed once unlocking cleared relays — they covered the
+  same ground with more knobs. Don't reintroduce a timer.
 - `QuietWristApp.kt` — exists only to write crashes into that log.
 - `MainActivity.kt` — setup and diagnostics screen, built programmatically.
 
