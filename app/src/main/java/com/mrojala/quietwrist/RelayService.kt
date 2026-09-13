@@ -2,6 +2,7 @@ package com.mrojala.quietwrist
 
 import android.app.Notification
 import android.app.NotificationChannel
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -9,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
@@ -36,6 +38,9 @@ class RelayService : NotificationListenerService() {
 
     /** Relays waiting out [COALESCE_MS], keyed by notification key. */
     private val pending = HashMap<String, Pending>()
+
+    /** Our notification id per source key, so each relay can be cancelled alone. */
+    private val relayIds = HashMap<String, Int>()
     private val handler = Handler(Looper.getMainLooper())
 
     /**
@@ -49,28 +54,47 @@ class RelayService : NotificationListenerService() {
      */
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (!Prefs.clearOnUnlock(this@RelayService)) return
             val waiting = pending.size
             pending.values.forEach { handler.removeCallbacks(it.post) }
             pending.clear()
+            relayIds.clear()
+
+            if (!Prefs.quietWhenUnlocked(this@RelayService)) {
+                Prefs.log(this@RelayService, "${stamp()}  ——  unlocked (clearing off)")
+                return
+            }
             NotificationManagerCompat.from(this@RelayService).cancelAll()
             val dropped = if (waiting > 0) ", $waiting pending dropped" else ""
             Prefs.log(this@RelayService, "${stamp()}  ——  cleared on unlock$dropped")
         }
     }
 
+    // Registered here rather than in onListenerConnected(): onCreate runs whenever
+    // the system instantiates the service, so the watch cannot be left unarmed by a
+    // binding callback that did not fire. Logged so the log can prove which it was.
+    override fun onCreate() {
+        super.onCreate()
+        val armed = runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                unlockReceiver,
+                IntentFilter(Intent.ACTION_USER_PRESENT),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }.isSuccess
+        Prefs.log(this, "${stamp()}  ——  unlock watch ${if (armed) "armed" else "FAILED to arm"}")
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(unlockReceiver) }
+        super.onDestroy()
+    }
+
     override fun onListenerConnected() {
-        ContextCompat.registerReceiver(
-            this,
-            unlockReceiver,
-            IntentFilter(Intent.ACTION_USER_PRESENT),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
         Prefs.log(this, "${stamp()}  ——  listener connected")
     }
 
     override fun onListenerDisconnected() {
-        runCatching { unregisterReceiver(unlockReceiver) }
         pending.values.forEach { handler.removeCallbacks(it.post) }
         pending.clear()
         Prefs.log(this, "${stamp()}  ——  listener DISCONNECTED")
@@ -175,14 +199,17 @@ class RelayService : NotificationListenerService() {
         // and shape, and notify() parcels the lot — so a bad notification must not
         // be allowed to take the listener down with it. Whatever it throws is
         // logged with its type, which is the only way to identify it from a phone.
-        try {
+        val id = try {
             Relay.post(this, entry.title.ifEmpty { "WhatsApp" }, entry.text, entry.notification)
         } catch (e: Throwable) {
             record("FAILED", "${e.javaClass.simpleName}: ${e.message} · ${entry.detail}", entry.title)
             return
         }
 
-        scheduleOriginalCleanup(key)
+        // Remembered so that when WhatsApp's own notification goes away — you read
+        // the chat, on the phone or anywhere else — the relay goes with it.
+        relayIds.put(key, id)?.let { NotificationManagerCompat.from(this).cancel(it) }
+
         val collapsed = if (entry.updates > 1) " ·${entry.updates} updates coalesced" else ""
         record("RELAY ", entry.detail + collapsed, entry.title)
     }
@@ -195,18 +222,13 @@ class RelayService : NotificationListenerService() {
      * simply lost if the process is killed first. Using an alarm to guarantee it
      * would trade the app's zero background cost for tidying up a notification.
      */
-    private fun scheduleOriginalCleanup(key: String) {
-        if (!Prefs.clearOriginal(this)) return
-        val minutes = Prefs.dismissMinutes(this)
-        if (minutes <= 0) return
-        handler.postDelayed({ cancelNotification(key) }, minutes * 60_000L)
-    }
-
     override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
         val key = sbn?.key ?: return
         lastRelayed.remove(key)
-        // A notification dismissed inside the window was read elsewhere; don't buzz.
+        // Dismissed inside the coalescing window: it was read elsewhere, don't buzz.
         pending.remove(key)?.let { handler.removeCallbacks(it.post) }
+        // WhatsApp withdrew the original, so the relay has nothing left to stand for.
+        relayIds.remove(key)?.let { NotificationManagerCompat.from(this).cancel(it) }
     }
 
     private class Pending(
@@ -246,7 +268,25 @@ class RelayService : NotificationListenerService() {
         // off: it still arrives at IMPORTANCE_DEFAULT. Vibration is a per-channel
         // setting, and the point of this app is to relay only what buzzes.
         if (channel != null && !channel.shouldVibrate()) return "vibration off"
+
+        // Nothing on the wrist while you are holding the phone: WhatsApp's own
+        // notification is already in front of you. Checked here rather than cleared
+        // afterwards, because ACTION_USER_PRESENT only fires on the unlock itself —
+        // a message arriving during use would otherwise sit there indefinitely.
+        if (Prefs.quietWhenUnlocked(this) && phoneInUse()) return "phone in use"
         return null
+    }
+
+    /**
+     * Screen on and past the lock screen — you are looking at the phone.
+     *
+     * A device with no secure lock never reports the keyguard as locked, so there
+     * the screen being awake is the whole signal, which is the same intent.
+     */
+    private fun phoneInUse(): Boolean {
+        val power = getSystemService(PowerManager::class.java) ?: return false
+        val keyguard = getSystemService(KeyguardManager::class.java) ?: return false
+        return power.isInteractive && !keyguard.isKeyguardLocked
     }
 
     private fun record(verdict: String, detail: String, title: String) {

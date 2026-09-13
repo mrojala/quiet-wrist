@@ -62,10 +62,9 @@ In **WhatsApp**: leave notifications on for everything, and for the chats you do
 want on your wrist either mute them or turn off their vibration under *Custom
 notifications*. Either is enough — those are the two signals QuietWrist filters on.
 
-Note that every relayed message appears in the phone's shade **twice**: WhatsApp's own
-notification and QuietWrist's copy. That is by design, since the original is what you
-catch up on from the phone. Turn on *Also clear WhatsApp's own notification* if you
-would rather not see both.
+A relayed message briefly sits in the phone's shade twice — WhatsApp's own notification
+and QuietWrist's copy — but only while the phone is locked. Unlocking clears the copy,
+so by the time you are looking at the shade there is just the original.
 
 ## Tuning
 
@@ -76,22 +75,11 @@ option when the phone is in your pocket.
 
 Controls:
 
-- **Auto-dismiss** — how long a relayed notification stays before clearing itself.
-  Defaults to 10 minutes; cycles through 1/5/10/30/60 minutes and never. Huawei Health
-  mirrors dismissals, so the message leaves the watch at the same moment — which is why
-  this is a delay rather than clearing the relay as soon as it is delivered. The system
-  performs the expiry itself (`setTimeoutAfter`), so it costs nothing and survives the
-  process being killed.
-- **Clear relays when I unlock the phone** — on by default. Once you're looking at the
-  phone, WhatsApp's own notification is right there, so the relay has done its job;
-  Huawei Health mirrors the dismissal and it leaves the watch too. Driven by
-  `ACTION_USER_PRESENT`, registered from the listener service (that broadcast is not
-  deliverable to manifest receivers since Android 8), so it is one more callback rather
-  than anything running in the background.
-- **Also clear WhatsApp's own notification** — clears the original on the same delay so
-  one message doesn't sit in the shade twice. Off by default, because it removes the copy
-  you'd otherwise catch up on from the phone. Best effort: it is a delayed callback, so a
-  killed process skips it.
+- **Stay quiet while the phone is unlocked** — on by default. A relay exists only to tell
+  you about a message you would otherwise miss, so it has no job once you are holding the
+  phone: WhatsApp's own notification is right there. Two halves, one switch — nothing is
+  relayed while the phone is unlocked and awake, and anything already on your wrist is
+  cleared the moment you unlock.
 - **Vibrate the phone too** — posts the relay on a high-importance channel instead of
   the silent one.
 - **Relay everything (debug)** — ignores the filter and relays every WhatsApp message.
@@ -99,6 +87,22 @@ Controls:
 - **Log every app (debug)** — logs notifications from all packages without relaying
   them, so you can confirm the listener is receiving anything at all without waiting
   for someone to message you.
+
+### When a relay goes away
+
+There is no expiry timer. A relay is cleared by an event, never by the clock:
+
+| Event | Effect |
+| --- | --- |
+| You unlock the phone (`ACTION_USER_PRESENT`) | every relay is cancelled, pending ones dropped |
+| WhatsApp withdraws its own notification — you read the chat, anywhere | that one relay is cancelled |
+| You tap the relay | `setAutoCancel` clears it and opens WhatsApp |
+
+Huawei Health mirrors dismissals, so each of these takes the message off the watch too.
+
+`ACTION_USER_PRESENT` is not deliverable to manifest receivers since Android 8, so it is
+registered from the listener service's `onCreate`. The log records `unlock watch armed`
+when that succeeds — if relays are not clearing, check that line is present.
 
 Crashes and failed posts land in the same log. `CRASH` lines come from an
 `Application`-level uncaught-exception handler, written synchronously so they survive the

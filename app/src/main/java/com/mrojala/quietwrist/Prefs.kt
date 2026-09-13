@@ -15,12 +15,7 @@ object Prefs {
     private const val KEY_VIBRATE_PHONE = "vibrate_phone"
     private const val KEY_RELAY_EVERYTHING = "relay_everything"
     private const val KEY_LOG_ALL_APPS = "log_all_apps"
-    private const val KEY_CLEAR_ON_UNLOCK = "clear_on_unlock"
-    private const val KEY_DISMISS_MINUTES = "dismiss_minutes"
-    private const val KEY_CLEAR_ORIGINAL = "clear_original"
-
-    /** Selectable auto-dismiss delays; 0 means never. */
-    val DISMISS_CHOICES = listOf(1, 5, 10, 30, 60, 0)
+    private const val KEY_QUIET_WHEN_UNLOCKED = "quiet_when_unlocked"
     private const val KEY_LOG = "log"
     private const val LOG_LIMIT = 80
     private const val SEPARATOR = "\n"
@@ -62,38 +57,18 @@ object Prefs {
         prefs(context).edit().putBoolean(KEY_LOG_ALL_APPS, value).apply()
 
     /**
-     * Minutes after which a relayed notification clears itself, or 0 to keep it.
+     * Stay off the wrist while the phone is unlocked and awake.
      *
-     * Huawei Health mirrors dismissals, so clearing the relay also clears it from
-     * the watch — which is why this is a delay rather than an immediate dismissal.
+     * Covers both halves of that: a message arriving while you are using the phone
+     * is never relayed, and relays that arrived while it was locked are cleared the
+     * moment you unlock. Either way WhatsApp's own notification is in front of you,
+     * so the copy on the wrist has nothing left to do.
      */
-    fun dismissMinutes(context: Context): Int =
-        prefs(context).getInt(KEY_DISMISS_MINUTES, 10)
+    fun quietWhenUnlocked(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_QUIET_WHEN_UNLOCKED, true)
 
-    fun setDismissMinutes(context: Context, value: Int) =
-        prefs(context).edit().putInt(KEY_DISMISS_MINUTES, value).apply()
-
-    /**
-     * Also clear WhatsApp's own notification on the same delay, so a message does
-     * not sit in the shade twice. Off by default: it removes the copy you would
-     * otherwise catch up on from the phone.
-     */
-    fun clearOriginal(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CLEAR_ORIGINAL, false)
-
-    fun setClearOriginal(context: Context, value: Boolean) =
-        prefs(context).edit().putBoolean(KEY_CLEAR_ORIGINAL, value).apply()
-
-    /**
-     * Clear relayed notifications as soon as the phone is unlocked. Once you are
-     * looking at the phone, WhatsApp's own notification is right there, so the copy
-     * on the wrist has done its job — and Huawei Health mirrors the dismissal.
-     */
-    fun clearOnUnlock(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CLEAR_ON_UNLOCK, true)
-
-    fun setClearOnUnlock(context: Context, value: Boolean) =
-        prefs(context).edit().putBoolean(KEY_CLEAR_ON_UNLOCK, value).apply()
+    fun setQuietWhenUnlocked(context: Context, value: Boolean) =
+        prefs(context).edit().putBoolean(KEY_QUIET_WHEN_UNLOCKED, value).apply()
 
     fun log(context: Context, line: String) {
         prefs(context).edit().putString(KEY_LOG, appended(context, line)).apply()
