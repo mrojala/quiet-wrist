@@ -8,11 +8,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
@@ -44,54 +46,109 @@ class RelayService : NotificationListenerService() {
     private val handler = Handler(Looper.getMainLooper())
 
     /**
-     * Clears the relays once the phone is unlocked: from then on WhatsApp's own
-     * notification is in front of you, so the copy on the wrist is redundant.
+     * `ACTION_USER_PRESENT` alone was not clearing anything in practice, and there
+     * is no way to find out why from a phone. So instead of one trigger that has to
+     * work, there are several independent ones, and the log names whichever fired.
      *
-     * Registered here rather than in the manifest — `ACTION_USER_PRESENT` is not
-     * deliverable to manifest receivers since Android 8. This service is already
-     * bound by the system for the app's whole life, so there is nothing extra to
-     * keep alive and no polling: it is one more callback.
+     * `SCREEN_ON` arrives while the keyguard may still be up, so every trigger goes
+     * through the same [phoneInUse] test rather than assuming what it implies.
      */
-    private val unlockReceiver = object : BroadcastReceiver() {
+    private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val waiting = pending.size
-            pending.values.forEach { handler.removeCallbacks(it.post) }
-            pending.clear()
-            relayIds.clear()
-
-            if (!Prefs.quietWhenUnlocked(this@RelayService)) {
-                Prefs.log(this@RelayService, "${stamp()}  ——  unlocked (clearing off)")
-                return
-            }
-            NotificationManagerCompat.from(this@RelayService).cancelAll()
-            val dropped = if (waiting > 0) ", $waiting pending dropped" else ""
-            Prefs.log(this@RelayService, "${stamp()}  ——  cleared on unlock$dropped")
+            clearIfInUse(intent?.action?.substringAfterLast('.') ?: "broadcast")
         }
     }
 
-    // Registered here rather than in onListenerConnected(): onCreate runs whenever
-    // the system instantiates the service, so the watch cannot be left unarmed by a
+    /**
+     * The direct signal, where the platform offers it: a callback for the keyguard
+     * being dismissed, rather than a broadcast that may or may not be delivered.
+     *
+     * Assigned only on API 33+, so the type is never loaded on older devices.
+     */
+    private var keyguardListener: KeyguardManager.KeyguardLockedStateListener? = null
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun armKeyguardListener(): Boolean {
+        val listener = KeyguardManager.KeyguardLockedStateListener { locked ->
+            if (!locked) clearIfInUse("keyguard")
+        }
+        val manager = getSystemService(KeyguardManager::class.java) ?: return false
+        manager.addKeyguardLockedStateListener(mainExecutor, listener)
+        keyguardListener = listener
+        return true
+    }
+
+    // Registered in onCreate rather than onListenerConnected: onCreate runs whenever
+    // the system instantiates the service, so these cannot be left unarmed by a
     // binding callback that did not fire. Logged so the log can prove which it was.
     override fun onCreate() {
         super.onCreate()
+
+        val filter = IntentFilter(Intent.ACTION_USER_PRESENT).apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        // RECEIVER_EXPORTED, not NOT_EXPORTED: both actions are protected broadcasts
+        // that only the system can send, so this grants nothing, and it removes one
+        // candidate explanation for the delivery never happening.
         val armed = runCatching {
             ContextCompat.registerReceiver(
                 this,
-                unlockReceiver,
-                IntentFilter(Intent.ACTION_USER_PRESENT),
-                ContextCompat.RECEIVER_NOT_EXPORTED,
+                screenReceiver,
+                filter,
+                ContextCompat.RECEIVER_EXPORTED,
             )
         }.isSuccess
-        Prefs.log(this, "${stamp()}  ——  unlock watch ${if (armed) "armed" else "FAILED to arm"}")
+
+        val listening = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            runCatching { armKeyguardListener() }.getOrDefault(false)
+
+        Prefs.log(
+            this,
+            "${stamp()}  ——  clear triggers: broadcasts=$armed keyguard=$listening",
+        )
     }
 
     override fun onDestroy() {
-        runCatching { unregisterReceiver(unlockReceiver) }
+        runCatching { unregisterReceiver(screenReceiver) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            keyguardListener?.let { listener ->
+                runCatching {
+                    getSystemService(KeyguardManager::class.java)
+                        ?.removeKeyguardLockedStateListener(listener)
+                }
+            }
+        }
         super.onDestroy()
+    }
+
+    /**
+     * Drops every relay, if the phone is genuinely in use and the setting allows it.
+     *
+     * Silent when there is nothing to clear — several triggers fire for the same
+     * unlock, and the log is only 80 lines.
+     */
+    private fun clearIfInUse(trigger: String) {
+        if (!Prefs.quietWhenUnlocked(this) || !phoneInUse()) return
+        val waiting = pending.size
+        if (waiting == 0 && relayIds.isEmpty()) return
+
+        pending.values.forEach { handler.removeCallbacks(it.post) }
+        pending.clear()
+        relayIds.clear()
+        NotificationManagerCompat.from(this).cancelAll()
+
+        val dropped = if (waiting > 0) ", $waiting pending dropped" else ""
+        Prefs.log(this, "${stamp()}  ——  cleared ($trigger)$dropped")
     }
 
     override fun onListenerConnected() {
         Prefs.log(this, "${stamp()}  ——  listener connected")
+    }
+
+    // Fires on shade interaction and other reshuffles, so it catches an unlock that
+    // produced no new notification of its own.
+    override fun onNotificationRankingUpdate(rankingMap: RankingMap?) {
+        clearIfInUse("in use")
     }
 
     override fun onListenerDisconnected() {
@@ -102,6 +159,10 @@ class RelayService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
         if (sbn == null) return
+        // The backstop, and the one trigger that cannot fail to be delivered: this
+        // callback fires for every app on the phone, so if relays are still showing
+        // while you are using it, the next notification from anything clears them.
+        clearIfInUse("in use")
         if (sbn.packageName != WHATSAPP_PACKAGE) {
             // Proves the listener is alive without waiting for someone to message you:
             // any notification from any app shows up here.
@@ -223,6 +284,7 @@ class RelayService : NotificationListenerService() {
      * would trade the app's zero background cost for tidying up a notification.
      */
     override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
+        clearIfInUse("in use")
         val key = sbn?.key ?: return
         lastRelayed.remove(key)
         // Dismissed inside the coalescing window: it was read elsewhere, don't buzz.
