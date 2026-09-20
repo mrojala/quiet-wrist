@@ -94,15 +94,27 @@ There is no expiry timer. A relay is cleared by an event, never by the clock:
 
 | Event | Effect |
 | --- | --- |
-| You unlock the phone (`ACTION_USER_PRESENT`) | every relay is cancelled, pending ones dropped |
 | WhatsApp withdraws its own notification — you read the chat, anywhere | that one relay is cancelled |
 | You tap the relay | `setAutoCancel` clears it and opens WhatsApp |
+| The phone turns out to be in use — see below | every relay is cancelled, pending ones dropped |
 
 Huawei Health mirrors dismissals, so each of these takes the message off the watch too.
 
-`ACTION_USER_PRESENT` is not deliverable to manifest receivers since Android 8, so it is
-registered from the listener service's `onCreate`. The log records `unlock watch armed`
-when that succeeds — if relays are not clearing, check that line is present.
+"In use" means the screen is on and the keyguard is not locked. That is checked from
+**four independent triggers**, because relying on `ACTION_USER_PRESENT` alone did not work
+in practice and a phone gives you no way to find out why:
+
+1. `ACTION_USER_PRESENT` — the unlock itself.
+2. `ACTION_SCREEN_ON` — catches a screen wake on a device with no secure lock.
+3. `KeyguardManager.addKeyguardLockedStateListener` — a direct platform callback rather
+   than a broadcast, on API 33+.
+4. Any notification callback at all, from any app, plus ranking updates. This one cannot
+   fail to be delivered: the service is already receiving these, so if relays are still
+   showing while you use the phone, the next notification from anything clears them.
+
+All four are callbacks — no polling, nothing held awake. Each clear is logged with the
+trigger that caused it (`cleared (keyguard)`, `cleared (in use)`, …), and startup logs
+`clear triggers: broadcasts=… keyguard=…` so a trigger that failed to arm is visible.
 
 Crashes and failed posts land in the same log. `CRASH` lines come from an
 `Application`-level uncaught-exception handler, written synchronously so they survive the
