@@ -73,6 +73,19 @@ relayed or skipped, with the importance level and channel id. That is the fastes
 way to find out why something did or didn't reach the watch — `adb logcat` isn't an
 option when the phone is in your pocket.
 
+### Testing it without bothering anyone
+
+**You cannot test by messaging yourself** — WhatsApp posts no notification for your own
+messages, so the listener never sees them. Use the **Meta AI** chat instead: its replies
+arrive as genuine incoming messages, on demand, as often as you like.
+
+- To test the filter, set *Custom notifications → Vibrate: Off* on that chat. The message
+  should log `skip … vibration off` and leave the watch alone. Turn it back on afterwards.
+- To test the relay path end to end without WhatsApp at all, use **Send test notification**.
+- To prove the listener is bound without waiting for a message, turn on *Log every app* and
+  trigger a notification from anything. Turn it off again afterwards — it shares the same
+  80-line budget, so real decisions scroll away within minutes while it is on.
+
 Controls:
 
 - **Stay quiet while the phone is unlocked** — on by default. A relay exists only to tell
