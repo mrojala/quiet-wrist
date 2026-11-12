@@ -1,4 +1,7 @@
-# Instructions for Claude
+# Instructions for coding agents
+
+Named `AGENTS.md` so every tool picks it up. Claude Code loads it as project instructions
+where there is no `CLAUDE.md`; don't add one alongside it.
 
 ## Project
 
