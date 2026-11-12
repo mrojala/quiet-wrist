@@ -12,6 +12,9 @@ See `README.md` for the mechanism and the device setup.
 - Dependencies are deliberately minimal — `androidx.core` only. Keep it that way; every
   added dependency slows the CI build that is the only way an APK reaches the phone.
 
+`HANDOFF.md` tracks what is currently unverified or broken. Read it before starting, and
+delete from it as things are resolved — anything durable belongs here or in `README.md`.
+
 ### Files
 
 - `RelayService.kt` — the `NotificationListenerService`; decides relay vs. skip.
@@ -69,6 +72,9 @@ See `README.md` for the mechanism and the device setup.
   The whole design is "wake on callback, do a few milliseconds of work, go back to sleep".
   Battery cost is the headline feature; do not regress it.
 - Every relay/skip decision must be recorded via `Prefs.log`. Tuning happens on-device.
+  **A notification dropped without a log line is the worst failure this app has**: the
+  `require-audible` switch silently ate real messages for hours and four of the filter's
+  early returns logged nothing, so there was no way to tell. Never add a silent `return`.
 - **Nothing may crash the listener.** `notify()` re-posts another app's MessagingStyle,
   including its avatars and history — unknown size and shape. Keep the post guarded and
   log what it throws; a crash loop costs battery and silently stops relaying.
@@ -86,6 +92,12 @@ Never commit a keystore, password, or base64 blob.
 
 Verify a change compiles by watching the Actions run (`gh run watch`), not by assuming.
 
+There are **no tests**. A run is ~38s of Gradle and ~70s of steps, but every change builds
+twice — once for the PR check, once on `main` to publish — so a one-line change costs
+several minutes. Dropping the `pull_request` trigger would halve that and is safe, since
+the release step is gated on the build succeeding: a broken `main` publishes nothing. It
+has been proposed and not yet decided.
+
 ## Git & PR workflow
 
 Hosted under the personal GitHub account `mrojala` (remote: `git@personal:mrojala/quiet-wrist.git`,
@@ -97,6 +109,11 @@ sets this via `includeIf`, and it is also set in this repo's local config — ch
 `git config user.email` before the first commit in a fresh clone or worktree.
 
 Work is delivered via feature branches → PRs against `main`. Name branches `feat/<slug>`.
+
+PRs are squash-merged, so a branch cut from a worktree *before* an earlier squash lands
+will conflict with `main` afterwards even when the trees are identical. Don't fight the
+rebase: re-cut from `origin/main`, re-apply the diff (`git diff origin/main HEAD` →
+`git apply --3way`), and close the stale PR.
 
 ### gh CLI: switch account before any gh command
 
