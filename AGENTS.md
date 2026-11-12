@@ -15,19 +15,12 @@ See `README.md` for the mechanism and the device setup.
 - Dependencies are deliberately minimal — `androidx.core` only. Keep it that way; every
   added dependency slows the CI build that is the only way an APK reaches the phone.
 
-`HANDOFF.md` tracks what is currently unverified or broken. Read it before starting, and
-delete from it as things are resolved — anything durable belongs here or in `README.md`.
-
 ### Files
 
 - `RelayService.kt` — the `NotificationListenerService`; decides relay vs. skip.
 - `Relay.kt` — builds and posts QuietWrist's own notification, including the forwarded
   WhatsApp reply action.
 - `Prefs.kt` — the settings plus the on-device decision log.
-- A relay is cleared by an **event**, never a timer: unlock, the source notification being
-  withdrawn, or a tap. An auto-dismiss delay and a "clear WhatsApp's own notification"
-  option both existed and were removed once unlocking cleared relays — they covered the
-  same ground with more knobs. Don't reintroduce a timer.
 - `QuietWristApp.kt` — exists only to write crashes into that log.
 - `MainActivity.kt` — setup and diagnostics screen, built programmatically.
 
@@ -38,7 +31,6 @@ delete from it as things are resolved — anything durable belongs here or in `R
   re-applying WhatsApp's `MessagingStyle` plus `WearableExtender` changed nothing — it
   does not inspect the notification. The forwarded reply action stays because it works
   from the phone's shade. Do not attempt prefix tricks or notification-shape tricks again.
-  The one avenue still open is the identity experiment below.
 - **Borrowing a whitelisted package name backfires — do not retry it.** Building under
   `com.whatsapp.w4b` and then `com.facebook.orca` (Messenger uninstalled, Huawei toggle
   confirmed on) did not unlock replies; it stopped relayed messages reaching the watch at
@@ -55,6 +47,13 @@ delete from it as things are resolved — anything durable belongs here or in `R
   QuietWrist `cancelNotification()` the muted chats fast enough that the watch never
   buzzes. It races Huawei's BLE push and will probably lose, but nothing else can give
   both quiet and reply.
+- **Keeping the wrist clear while the phone is in use took three attempts; don't unpick it.**
+  `ACTION_USER_PRESENT` alone fails, because it fires only on the unlock *transition* — a
+  message arriving while the phone was already unlocked got relayed and then sat there. The
+  fix is two-part: check `phoneInUse()` *before* posting, and hang that same check off
+  several independent triggers rather than one broadcast. What made it reliable is the
+  trigger that cannot fail to be delivered — the listener's own notification and ranking
+  callbacks, which already arrive for every app on the phone. Confirmed stable since 0.1.31.
 - **The filter needs both importance and channel vibration.** WhatsApp gives every chat
   with custom notification settings its own channel (named after the JID, e.g.
   `358504907785-1482932896@g.us_69`). A muted chat drops below `IMPORTANCE_DEFAULT`, but a
@@ -80,7 +79,17 @@ delete from it as things are resolved — anything durable belongs here or in `R
   early returns logged nothing, so there was no way to tell. Never add a silent `return`.
 - **Nothing may crash the listener.** `notify()` re-posts another app's MessagingStyle,
   including its avatars and history — unknown size and shape. Keep the post guarded and
-  log what it throws; a crash loop costs battery and silently stops relaying.
+  log what it throws; a crash loop costs battery and silently stops relaying. The app did
+  crash occasionally with WhatsApp open before 0.1.27 added that guard, and has not since.
+  Note that the guard turns such a crash into a `FAILED` log line, so "no crashes" and
+  "the guard is catching something" look identical from outside — if it matters, check the
+  log for `FAILED`. The standing suspect was `TransactionTooLargeException` from those
+  avatars, never confirmed; if it ever recurs, wait for the log line before acting, because
+  a confident theory about this exact code path already cost one wasted cycle.
+- **A relay is cleared by an event, never a timer**: the phone being in use, the source
+  notification being withdrawn, or a tap. An auto-dismiss delay and a "clear WhatsApp's own
+  notification" option both existed and were removed once unlocking cleared relays — they
+  covered the same ground with more knobs. Don't reintroduce a timer.
 
 ## Build & release
 
